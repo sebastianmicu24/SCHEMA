@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SCHEMA Classifier</title>
+    <!-- Add required libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="https://cdn.iconscout.com/icon/free/png-256/free-microscope-icon-download-in-svg-png-gif-file-formats--science-line-icons-pack-healthcare-medical-456344.png">
+    <style>
+        canvas { border: 1px solid #000; background: #f8f8f8; }
+        .container {
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .controls {
+            margin-bottom: 15px;
+            flex-shrink: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+        .loading { display: none; margin: 10px 0; }
+        .canvas-container {
+            width: 90vw;
+            height: 80vh;
+            overflow: auto;
+            border: 1px solid #ddd;
+            background: white;
+            flex-grow: 1;
+            padding: 2px;
+            margin-bottom: 20px;
+        }
+        #canvas {
+            display: block;
+            min-width: 100%;
+            min-height: 100%;
+        }
+        /* Narrower scrollbars */
+        .canvas-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+            background: #f8f8f8;
+        }
+        .canvas-container::-webkit-scrollbar-thumb {
+            background: #3498db;
+            border-radius: 10px;
+        }
+        .scale-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .scale-readout {
+            font-weight: bold;
+            color: #2c3e50;
+            min-width: 80px;
+        }
+        .progress-bar {
+            width: 200px;
+            height: 20px;
+            border: 1px solid #ccc;
+            margin: 5px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            transition: width 0.3s ease;
+        }
+        body {
+            margin: 0 !important;
+        }
+        .nav-arrow { 
+            cursor: pointer;
+            padding: 12px;
+            transition: all 0.3s ease;
+            border-radius: 10px;
+            background: #2c3e50;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-right: 30px;
+        }
+        #nextPage {
+            margin-left: 30px;
+        }
+        .nav-arrow:hover {
+            background: #3498db;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .page { display: none; }
+        .page.active { display: block; }
+        
+        /* New styles for results tables */
+        .results-table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .results-table th, .results-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .results-table th {
+            background-color: #f5f5f5;
+        }
+        .results-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <header style="text-align: center; padding: 10px 0; background: #3a546e; color: white; font-family: Arial, Helvetica, sans-serif; display: flex; align-items: center; justify-content: center;">
+        <div class="nav-arrow" id="prevPage">
+            <svg viewBox="0 0 24 24" width="28" height="28">
+                <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" fill="white"/>
+            </svg>
+        </div>
+        <h1>SCHEMA Classifier</h1>
+        <div class="nav-arrow" id="nextPage">
+            <svg viewBox="0 0 24 24" width="28" height="28">
+                <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" fill="white"/>
+            </svg>
+        </div>
+    </header>
+    
+    <div class="page active" id="page1">
+        <div class="container">
+            <div class="controls">
+                <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                    <div style="display: flex; gap: 15px;">
+                        <div class="imageInput" style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                            <div class="file-input-wrapper">
+                                <input type="file" id="imageFolderInput" webkitdirectory directory multiple hidden>
+                                <label for="imageFolderInput" style="padding: 8px 15px; background: #3498db; color: white; border-radius: 10px; cursor: pointer; font-family: Arial, Helvetica, sans-serif;">Choose Image Folder</label>
+                            </div>
+                            <select id="imageDropdown" style="padding: 8px 15px; margin-left: 10px; display: none;">
+                                <option value="">Select an image</option>
+                            </select>
+                        </div>
+                        <div class="csvInput" style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                            <div class="file-input-wrapper">
+                                <input type="file" id="csvFolderInput" webkitdirectory directory multiple hidden>
+                                <label for="csvFolderInput" style="padding: 8px 15px; background: #27ae60; color: white; border-radius: 10px; cursor: pointer; font-family: Arial, Helvetica, sans-serif;">Choose CSV Folder</label>
+                            </div>
+                            <select id="csvDropdown" style="padding: 8px 15px; margin-left: 10px; display: none;">
+                                <option value="">Select a CSV file</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <label style="font-family: Arial, Helvetica, sans-serif;">Global Scale:
+                            <input type="number" id="globalScale" value="0.29" step="0.0001" min="0.01" max="2">
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="class-controls" style="margin: 10px 0; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 10px;">
+                <input type="color" id="classColor" value="#ff0000" style="margin-right: 10px;">
+                <input type="text" id="className" placeholder="Enter class name" 
+                       style="padding: 5px; border-radius: 10px; border: 1px solid #ddd; margin-right: 10px;">
+                <button class="button secondary" id="addClassBtn">Add Class</button>
+                <select id="classSelect" style="padding: 5px; border-radius: 10px; margin-left: 10px;">
+                    <option value="Unclassified" style="background-color: #808080; color: white;">Unclassified</option>
+                </select>
+            </div>
+            
+            <div class="canvas-container" id="scrollContainer">
+                <canvas id="canvas" width="80vw" height="70vh"></canvas>
+            </div>
+            
+            <div style="display: flex; gap: 15px; margin-top: 20px;">
+                <button id="downloadTrainingData" class="data-button1" style="padding: 8px 15px; background: #3498db; color: white; border-radius: 10px; cursor: pointer; font-family: Arial, Helvetica, sans-serif; margin-bottom: 20px;">Download Training Data</button>
+                <button id="uploadTrainingData" class="data-button1" style="padding: 8px 15px; background: #27ae60; color: white; border-radius: 10px; cursor: pointer; font-family: Arial, Helvetica, sans-serif; margin-bottom: 20px">Upload Training Data</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="page" id="page2">
+        <div class="container" style="padding: 20px;">
+            <h2 style="font-family: Arial, Helvetica, sans-serif;">Random Forest Training</h2>
+            <button id="processData" style="padding: 8px 15px; background: #27ae60; color: white; border-radius: 10px; cursor: pointer; font-family: Arial, Helvetica, sans-serif; margin-bottom: 20px">Process Data</button>
+            
+            <div class="loading">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>   
+            <div id="statusText"></div>
+            <div id="progress"></div>
+            
+            <!-- Random Forest Parameters -->
+            <div class="param-group" style="margin-top: 20px; font-family: Arial, Helvetica, sans-serif; background-color: #ddd; padding: 20px; border-radius: 10px; max-width: 800px;">
+                <h3>Random Forest Parameters</h3>
+                
+                <div style="margin: 20px 0;">
+                    <label for="numTrees">Number of Trees:</label>
+                    <input type="number" id="numTrees" value="100" style="border-radius: 10px; border-style: solid; border-color: #000; border-width: 2px; width: 50px; text-align: center;">
+                    <div style="color: #666; font-size: 0.9em;">Usually 100 Trees is enough, if you are seriously trying to classify the cells using most of the variables than increase it to 200-300</div>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <label for="maxDepth">Max Tree Depth:</label>
+                    <input type="number" id="maxDepth" value="10" style="border-radius: 10px; border-style: solid; border-color: #000; border-width: 2px; width: 50px; text-align: center;">
+                    <div style="color: #666; font-size: 0.9em;">If set too low causes overfitting, which is a false high accuracy, if you have enough training data set it around 10</div>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <label for="minSamplesSplit">Min Samples to Split:</label>
+                    <input type="number" id="minSamplesSplit" value="5" style="border-radius: 10px; border-style: solid; border-color: #000; border-width: 2px; width: 50px; text-align: center;">
+                    <div style="color: #666; font-size: 0.9em;">Less than 1000 cells you can put it at 10, if you have more you can increase it to 20. Increasing this value will decrease overfitting</div>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <label for="minSamplesLeaf">Min Samples per Leaf:</label>
+                    <input type="number" id="minSamplesLeaf" value="1" style="border-radius: 10px; border-style: solid; border-color: #000; border-width: 2px; width: 50px; text-align: center;">
+                    <div style="color: #666; font-size: 0.9em;">Increasing this value will remove more noise from the data, again decreasing the chance of overfitting</div>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <label for="maxFeatures">Max Features:</label>
+                    <select id="maxFeatures" style="border-radius: 10px; border-style: solid; border-color: #000; border-width: 2px; text-align: center; padding-left: 10px; padding-right: 10px;">
+                        <option value="sqrt">sqrt(n)</option>
+                        <option value="log2">log2(n)</option>
+                        <option value="auto">All features (n)</option>
+                    </select>
+                    <div style="color: #666; font-size: 0.9em;">The square root usually works well, if you use almost all variables the log might be better, if you are not concerned about computation time "All features" adds a little bit of accuracy.</div>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <label>
+                        <input type="checkbox" id="doCrossValidation" checked >
+                        Enable Cross Validation
+                    </label>
+                    <div id="kFoldContainer" >
+                        <label for="kFold" style = "margin-left: 20px;">K-Fold:</label>
+                        <input type="number" id="kFold" value="10" min="2" style="border-radius: 10px; border-style: solid; border-color: #000; border-width: 2px; width: 50px; text-align: center; margin-top: 10px;">
+                        <div style="color: #666; font-size: 0.9em; margin-left: 20px;">It splits your data into K parts, using one to 'test' it and the rest to build the model. It then repeats the process K times until it has 'tested' all data. 5 or 10 is the norm. This is what allows us to calculate the accuracy.</div>
+                    </div>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <label>
+                        <input type="checkbox" id="doImportance" checked>
+                        Calculate Feature Importance
+                    </label>
+                    <div style="color: #666; font-size: 0.9em;">It tells you how much each variable has influence the decision when classifying the cells</div>
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <label>
+                        <input type="checkbox" id="useClassWeights">
+                        Use Class Weights
+                    </label>
+                    <div style="color: #666; font-size: 0.9em;">Balances the model by giving more weight to underrepresented classes, use only if you have really unbalanced data, it is better to take a proportional number of each class</div>
+                </div>
+            </div>
+
+            <!-- Feature Selection -->
+            <div style="margin-top: 20px; position: relative;">
+                <button id="dropdownToggle" style="padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 10px; cursor: pointer; border-style: solid; border-color: #000; border-width: 2px;">
+                    Select Features ▼
+                </button>
+                <div id="checkboxContainer" style="display: none; position: absolute; background: white; font-family: Arial, Helvetica, sans-serif; border: 1px solid #ddd; border-radius: 10px; padding: 10px; margin-top: 5px; max-height: 500px; overflow-y: auto; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 1000;">
+                    <!-- Checkboxes will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Results Display -->
+            <div id="results" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Event listeners for training data buttons
+        document.getElementById('downloadTrainingData').addEventListener('click', () => {
+            if (!trainingData || trainingData.length < 2) {
+                alert('No training data to download');
+                return;
+            }
+            
+            const csv = Papa.unparse(trainingData);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'training_data.csv';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('uploadTrainingData').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            
+            input.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                Papa.parse(file, {
+                    header: false,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        if (!trainingData) {
+                            trainingData = results.data;
+                        } else {
+                            trainingData.push(...results.data.slice(1));
+                        }
+                        const dummyFile = new File([file], 'uploaded.csv', {type: 'text/csv'});
+                        dummyFile.webkitRelativePath = 'uploaded/uploaded.csv';
+                        
+                        csvFiles.push(dummyFile);
+                        const dropdown = document.getElementById('csvDropdown');
+                        const option = document.createElement('option');
+                        option.value = dummyFile.webkitRelativePath;
+                        option.textContent = 'uploaded.csv';
+                        dropdown.appendChild(option);
+                        dropdown.value = dummyFile.webkitRelativePath;
+                        
+                        alert('Training data uploaded successfully');
+                        handleCSVSelection({target: dropdown});
+                        redrawCanvas();
+                    },
+                    error: (error) => {
+                        console.error('CSV upload error:', error);
+                        alert('Error uploading training data');
+                    }
+                });
+            });
+            
+            input.click();
+        });
+
+        // Global variables
+        let backgroundImage = null;
+        let imageScaleInfo = null;
+        let data = null;
+        let trainingData = null;
+        let matchedData = null;
+        const viewport = { scrollX: 0, scrollY: 0 };
+        let imageFiles = [];
+        let csvFiles = [];
+        // let options = [];
+        // let combinedCells = [];
+        // let combinedVessels = [];
+        // let combinedGeneral = [];
+        // let trainedModel = null;
+
+        // Event listeners
+        document.getElementById('imageFolderInput').addEventListener('change', handleImageFolder);
+        document.getElementById('imageDropdown').addEventListener('change', handleImageSelection);
+        document.getElementById('csvFolderInput').addEventListener('change', handleCSVFolder);
+        document.getElementById('csvDropdown').addEventListener('change', handleCSVSelection);
+        
+        document.getElementById('addClassBtn').addEventListener('click', () => {
+            const colorInput = document.getElementById('classColor');
+            const nameInput = document.getElementById('className');
+            
+            if (!nameInput.value.trim()) return;
+            
+            const option = document.createElement('option');
+            option.value = nameInput.value;
+            option.textContent = nameInput.value;
+            option.style.backgroundColor = colorInput.value;
+            option.style.fontWeight = 'bold';
+            
+            const hex = colorInput.value.slice(1);
+            const r = parseInt(hex.substr(0,2), 16);
+            const g = parseInt(hex.substr(2,2), 16);
+            const b = parseInt(hex.substr(4,2), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+            option.style.color = luminance < 128 ? 'white' : 'black';
+            
+            document.getElementById('classSelect').appendChild(option);
+            nameInput.value = '';
+        });
+
+        // Viewport controls
+        const scaleInput = document.getElementById('globalScale');
+        const scrollContainer = document.getElementById('scrollContainer');
+
+        scaleInput.addEventListener('input', function() {
+            redrawCanvas();
+        });
+
+        scrollContainer.addEventListener('scroll', () => {
+            viewport.scrollX = scrollContainer.scrollLeft;
+            viewport.scrollY = scrollContainer.scrollTop;
+            redrawCanvas();
+        });
+
+        // TIFF handling
+        let activeWorker = null;
+        let isCancelled = false;
+
+        function updateProgress(percent, message) {
+            document.querySelector('.loading').style.display = 'block';
+            document.querySelector('.progress-fill').style.width = `${percent}%`;
+            document.getElementById('statusText').textContent = message;
+        }
+
+        function handleImageSelection(event) {
+            const selectedFile = event.target.value;
+            if (!selectedFile) return;
+
+            const file = imageFiles.find(f => f.webkitRelativePath === selectedFile);
+            if (!file) return;
+
+            loadImageFile(file);
+        }
+
+        async function handleImageFolder(event) {
+            const files = Array.from(event.target.files);
+            imageFiles = files.filter(f => f.name.match(/\.(tiff?|png|jpe?g|bmp)$/i));
+
+            const dropdown = document.getElementById('imageDropdown');
+            dropdown.innerHTML = '<option value="">Select an image</option>';
+            imageFiles.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file.webkitRelativePath;
+                option.textContent = file.webkitRelativePath.split('/').slice(1).join('/');
+                dropdown.appendChild(option);
+            });
+            dropdown.style.display = 'inline-block';
+        }
+
+        function loadImageFile(file) {
+            isCancelled = false;
+            updateProgress(0, 'Loading image...');
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    let bitmap;
+                    if (file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff')) {
+                        const uint8Array = new Uint8Array(e.target.result);
+                        const ifds = UTIF.decode(uint8Array);
+                        UTIF.decodeImage(uint8Array, ifds[0]);
+                        const rgba = UTIF.toRGBA8(ifds[0]);
+                        const imageData = new ImageData(
+                            new Uint8ClampedArray(rgba),
+                            ifds[0].width,
+                            ifds[0].height
+                        );
+                        bitmap = await createImageBitmap(imageData);
+                    } else {
+                        bitmap = await createImageBitmap(new Blob([e.target.result], {type: file.type}));
+                    }
+
+                    // Initialize canvas with image dimensions
+                    const canvas = document.getElementById('canvas');
+                    canvas.width = bitmap.width;
+                    canvas.height = bitmap.height;
+
+                    imageScaleInfo = {
+                        scale: 1,
+                        offsetX: 0,
+                        offsetY: 0,
+                        imgWidth: bitmap.width,
+                        imgHeight: bitmap.height
+                    };
+
+                    backgroundImage = bitmap;
+
+                    // Center canvas in container
+                    const container = document.getElementById('scrollContainer');
+                    container.scrollTo({
+                        left: (canvas.width - container.clientWidth) / 2,
+                        top: (canvas.height - container.clientHeight) / 2
+                    });
+
+                    redrawCanvas();
+                    updateProgress(100, 'Done!');
+                    setTimeout(() => document.querySelector('.loading').style.display = 'none', 500);
+                } catch (error) {
+                    console.error('Image processing error:', error);
+                    alert('Error processing image file');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function handleCSVSelection(event) {
+            const selectedFile = event.target.value;
+            if (!selectedFile) return;
+
+            const file = csvFiles.find(f => f.webkitRelativePath === selectedFile);
+            if (!file) return;
+
+            loadCSVFile(file);
+        }
+
+        // Recursively get all csv files from folder
+        async function handleCSVFolder(event) {
+            const files = Array.from(event.target.files);
+            csvFiles = files.filter(f => f.name.match(/\.csv$/i));
+
+            const dropdown = document.getElementById('csvDropdown');
+            dropdown.innerHTML = '<option value="">Select a CSV file</option>';
+            csvFiles.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file.webkitRelativePath;
+                option.textContent = file.webkitRelativePath.split('/').slice(1).join('/');
+                dropdown.appendChild(option);
+            });
+            dropdown.style.display = 'inline-block';
+        }
+
+        function loadCSVFile(file) {
+            updateProgress(0, 'Parsing CSV...');
+            isCancelled = false;
+
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                preview: 10000,
+                chunk: function(results, parser) {
+                    if (isCancelled) {
+                        parser.abort();
+                        return;
+                    }
+                    const headers = results.meta.fields;
+                    data = [
+                        headers,
+                        ...results.data
+                            .filter(row => row[headers[0]]?.startsWith('Nucleus_'))
+                            .map(row => headers.map(header => row[header]))
+                    ];
+                    
+                    if (!trainingData) {
+                        trainingData = [[...headers, "Filename", "Particle Class", "Particle Colour"]];
+                    }
+                    updateProgress((results.meta.cursor / file.size * 100).toFixed(1), 'Processing CSV...');
+                },
+                complete: function() {
+                    redrawCanvas();
+                    updateProgress(100, 'CSV loaded!');
+                    setTimeout(() => {
+                        document.querySelector('.loading').style.display = 'none';
+                    }, 500);
+                },
+                error: function(error) {
+                    console.error('CSV parsing error:', error);
+                    alert('Error parsing CSV file');
+                    document.querySelector('.loading').style.display = 'none';
+                }
+            });
+        }
+
+        const MAX_RENDER_NUCLEI = 15000;
+
+        function getRGBAFromColor(color) {
+            if (!color) return 'rgba(128, 128, 128, 0.2)';
+            
+            try {
+                if (color.startsWith('#')) {
+                    const r = parseInt(color.slice(1, 3), 16);
+                    const g = parseInt(color.slice(3, 5), 16);
+                    const b = parseInt(color.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, 0.2)`;
+                }
+                if (color.startsWith('rgb(')) {
+                    return color.replace('rgb', 'rgba').replace(')', ', 0.2)');
+                }
+                return 'rgba(128, 128, 128, 0.2)';
+            } catch (e) {
+                return 'rgba(128, 128, 128, 0.2)';
+            }
+        }
+
+        document.getElementById('canvas').addEventListener('click', (event) => {
+            if (!trainingData || !imageScaleInfo) return;
+            
+            const rect = event.target.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            
+            const { scale, offsetX, offsetY } = imageScaleInfo;
+            const globalScale = parseFloat(document.getElementById('globalScale').value) || 1;
+            const selectedClass = document.getElementById('classSelect').value;
+            const selectedOption = document.getElementById('classSelect').options[document.getElementById('classSelect').selectedIndex];
+            const selectedColor = selectedOption.style.backgroundColor || '#808080';
+
+            const selectedCSV = document.getElementById('csvDropdown').value;
+            const csvFile = csvFiles.find(f => f.webkitRelativePath === selectedCSV);
+            if (!csvFile) return;
+
+            data.slice(1).some((row, index) => {
+                const headers = data[0];
+                const n = {};
+                headers.forEach((header, i) => n[header] = row[i]);
+                
+                const major = (n.Major / globalScale) * scale;
+                const minor = (n.Minor / globalScale) * scale;
+                const x = (n.X / globalScale) * scale + offsetX;
+                const y = (n.Y / globalScale) * scale + offsetY;
+                
+                if (Math.abs(x - mouseX) < major/2 && Math.abs(y - mouseY) < minor/2) {
+                    const existingIndex = trainingData.findIndex(tr => tr[0] === row[0] && tr[trainingData[0].length - 3] === csvFile.name);
+                    
+                    if (existingIndex !== -1) {
+                        trainingData[existingIndex][trainingData[0].length - 2] = selectedClass;
+                        trainingData[existingIndex][trainingData[0].length - 1] = selectedColor;
+                    } else {
+                        trainingData.push([...row, csvFile.name, selectedClass, selectedColor]);
+                    }
+                    redrawCanvas();
+                    return true;
+                }
+            });
+        });
+
+        // Page navigation
+        let currentPage = 1;
+        const totalPages = 2;
+        
+        function updateNavigation() {
+            document.querySelectorAll('.page').forEach(page => 
+                page.classList.remove('active'));
+            document.getElementById(`page${currentPage}`).classList.add('active');
+        }
+
+        document.getElementById('prevPage').addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                updateNavigation();
+            }
+        });
+
+        document.getElementById('nextPage').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                updateNavigation();
+            }
+        });
+
+        function redrawCanvas() {
+            if (data?.length > MAX_RENDER_NUCLEI) {
+                data = [data[0], ...data.slice(1, MAX_RENDER_NUCLEI + 1)];
+            }
+
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const globalScale = parseFloat(document.getElementById('globalScale').value) || 1;
+
+            if (backgroundImage && imageScaleInfo) {
+                const { scale, imgWidth, imgHeight } = imageScaleInfo;
+                const container = document.getElementById('scrollContainer');
+                const viewportLeft = container.scrollLeft;
+                const viewportTop = container.scrollTop;
+                const viewportWidth = container.clientWidth;
+                const viewportHeight = container.clientHeight;
+
+                const margin = 100;
+                const sourceX = Math.max(0, Math.floor(viewportLeft / scale - margin));
+                const sourceY = Math.max(0, Math.floor(viewportTop / scale - margin));
+                const sourceWidth = Math.min(imgWidth - sourceX, Math.ceil((viewportWidth + 2 * margin) / scale));
+                const sourceHeight = Math.min(imgHeight - sourceY, Math.ceil((viewportHeight + 2 * margin) / scale));
+
+                ctx.drawImage(backgroundImage,
+                    sourceX, sourceY, sourceWidth, sourceHeight,
+                    sourceX * scale, sourceY * scale, sourceWidth * scale, sourceHeight * scale
+                );
+            }
+
+            if (data && imageScaleInfo) {
+                const { scale, offsetX, offsetY } = imageScaleInfo;
+                const headers = data[0];
+                const rows = data.slice(1);
+                
+                const container = document.getElementById('scrollContainer');
+                const viewWidth = container.clientWidth;
+                const viewHeight = container.clientHeight;
+                const scrollX = container.scrollLeft;
+                const scrollY = container.scrollTop;
+
+                rows.forEach(row => {
+                    const n = {};
+                    headers.forEach((header, index) => {
+                        n[header] = row[index];
+                    });
+                    
+                    const major = (n.Major / globalScale) * scale;
+                    const minor = (n.Minor / globalScale) * scale;
+                    const angle = -n.Angle * Math.PI / 180;
+                    
+                    const x = (n.X / globalScale) * scale + offsetX;
+                    const y = (n.Y / globalScale) * scale + offsetY;
+
+// Skip drawing if cell is outside viewport with 20% margin
+const margin = 0.2 * Math.max(viewWidth, viewHeight);
+                    if (x + major < scrollX - margin || 
+                        x - major > scrollX + viewWidth + margin ||
+                        y + minor < scrollY - margin || 
+                        y - minor > scrollY + viewHeight + margin) {
+                        return;
+                    }
+
+                    ctx.save();
+
+                    // Drawing styles
+                    // Find matching particle in trainingData by ID only
+                    const trainedParticle = trainingData.find(tr => tr[0] === row[0]);
+                    const particleColor = trainedParticle ? trainedParticle[trainingData[0].length - 1] : '#808080';
+                    if (trainedParticle) {
+                        console.log('Drawing trained particle:', row[0], 'with color:', particleColor);
+                    }
+                    ctx.strokeStyle = particleColor;
+                    ctx.fillStyle = getRGBAFromColor(particleColor);
+                    ctx.lineWidth = 2;
+
+                    // Draw ellipse
+                    ctx.translate(x, y);
+                    ctx.rotate(angle);
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, major/2, minor/2, 0, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                });
+            }
+        }
+    </script>
+    </div> <!-- Close page1 div -->
+    
+    <div class="page" id="page2">
+        <div class="container" style="padding: 20px;">
+            <h2>Page 2 Content</h2>
+            <button id="processData" style="padding: 8px 15px; background: #e67e22; color: white; border-radius: 10px; cursor: pointer; font-family: Arial, Helvetica, sans-serif; margin-bottom: 20px">Process Data</button>
+            <div class="loading">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>   
+            <div id="statusText"></div>
+            <div id="progress"></div>
+            
+            <!-- Random Forest Parameters -->
+            <div class="param-group" style="margin-top: 20px;">
+                <h3>Random Forest Parameters</h3>
+                
+                <div style="margin: 10px 0;">
+                    <label for="numTrees">Number of Trees:</label>
+                    <input type="number" id="numTrees" value="100">
+                    <div style="color: #666; font-size: 0.9em;">Controls model complexity and accuracy. More trees = more accurate but slower.</div>
+                </div>
+
+                <div style="margin: 10px 0;">
+                    <label for="maxDepth">Max Tree Depth:</label>
+                    <input type="number" id="maxDepth" value="10">
+                    <div style="color: #666; font-size: 0.9em;">Limits overfitting by controlling maximum depth of each tree.</div>
+                </div>
+
+                <div style="margin: 10px 0;">
+                    <label for="minSamplesSplit">Min Samples to Split:</label>
+                    <input type="number" id="minSamplesSplit" value="2">
+                    <div style="color: #666; font-size: 0.9em;">Minimum number of samples required to split an internal node.</div>
+                </div>
+
+                <div style="margin: 10px 0;">
+                    <label for="minSamplesLeaf">Min Samples per Leaf:</label>
+                    <input type="number" id="minSamplesLeaf" value="1">
+                    <div style="color: #666; font-size: 0.9em;">Minimum number of samples required to be at a leaf node.</div>
+                </div>
+
+                <div style="margin: 10px 0;">
+                    <label for="maxFeatures">Max Features:</label>
+                    <select id="maxFeatures">
+                        <option value="sqrt">sqrt(n_features)</option>
+                        <option value="log2">log2(n_features)</option>
+                        <option value="auto">All features</option>
+                    </select>
+                    <div style="color: #666; font-size: 0.9em;">Number of features to consider when looking for the best split.</div>
+                </div>
+
+                <div style="margin: 10px 0;">
+                    <label>
+                        <input type="checkbox" id="doCrossValidation" checked>
+                        Enable Cross Validation
+                    </label>
+                    <div id="kFoldContainer" style="margin-left: 20px;">
+                        <label for="kFold">K-Fold:</label>
+                        <input type="number" id="kFold" value="10" min="2">
+                        <div style="color: #666; font-size: 0.9em;">Number of folds for cross-validation (recommended: 5-10).</div>
+                    </div>
+                </div>
+
+                <div style="margin: 10px 0;">
+                    <label>
+                        <input type="checkbox" id="doImportance" checked>
+                        Calculate Feature Importance
+                    </label>
+                </div>
+
+                <div style="margin: 10px 0;">
+                    <label>
+                        <input type="checkbox" id="useClassWeights" checked>
+                        Use Class Weights
+                    </label>
+                    <div style="color: #666; font-size: 0.9em;">Balances the model by giving more weight to underrepresented classes</div>
+                </div>
+            </div>
+
+            <!-- Feature Selection -->
+            <div style="margin-top: 20px; position: relative;">
+                <button id="dropdownToggle" style="padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 10px; cursor: pointer;">
+                    Select Features ▼
+                </button>
+                <div id="checkboxContainer" style="display: none; position: absolute; background: white; font-family: Arial, Helvetica, sans-serif; border: 1px solid #ddd; border-radius: 10px; padding: 10px; margin-top: 5px; max-height: 500px; overflow-y: auto; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 1000;">
+                    <!-- Checkboxes will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Results Display -->
+            <div id="results" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let options = [];
+        let combinedCells = [];
+        let combinedVessels = [];
+        let combinedGeneral = [];
+        let trainedModel = null;
+
+        // Random Forest Implementation
+        class DecisionTree {
+            constructor(maxDepth = 10, minSamplesSplit = 2, minSamplesLeaf = 1, maxFeatures = 'sqrt') {
+                this.maxDepth = maxDepth;
+                this.minSamplesSplit = minSamplesSplit;
+                this.minSamplesLeaf = minSamplesLeaf;
+                this.maxFeatures = maxFeatures;
+                this.root = null;
+            }
+
+            fit(X, y) {
+                this.root = this.buildTree(X, y, 0);
+            }
+
+            buildTree(X, y, depth) {
+                const classCounts = {};
+                for (const cls of y) {
+                    classCounts[cls] = (classCounts[cls] || 0) + 1;
+                }
+                
+                const node = {
+                    samples: X.length,
+                    classCounts: classCounts,
+                    isLeaf: false
+                };
+
+                if (depth >= this.maxDepth || new Set(y).size === 1 || X.length < this.minSamplesSplit) {
+                    return {
+                        ...node,
+                        value: this.mostCommon(y),
+                        isLeaf: true
+                    };
+                }
+
+                const bestSplit = this.findBestSplit(X, y);
+                if (!bestSplit) {
+                    return {
+                        ...node,
+                        value: this.mostCommon(y),
+                        isLeaf: true
+                    };
+                }
+
+                const { feature, threshold } = bestSplit;
+                const leftIndices = [];
+                const rightIndices = [];
+                
+                for (let i = 0; i < X.length; i++) {
+                    if (X[i][feature] <= threshold) {
+                        leftIndices.push(i);
+                    } else {
+                        rightIndices.push(i);
+                    }
+                }
+
+                if (leftIndices.length < this.minSamplesLeaf || rightIndices.length < this.minSamplesLeaf) {
+                    return {
+                        ...node,
+                        value: this.mostCommon(y),
+                        isLeaf: true
+                    };
+                }
+
+                const leftX = leftIndices.map(i => X[i]);
+                const leftY = leftIndices.map(i => y[i]);
+                const rightX = rightIndices.map(i => X[i]);
+                const rightY = rightIndices.map(i => y[i]);
+
+                return {
+                    ...node,
+                    feature,
+                    threshold,
+                    left: this.buildTree(leftX, leftY, depth + 1),
+                    right: this.buildTree(rightX, rightY, depth + 1)
+                };
+            }
+
+            findBestSplit(X, y) {
+                let bestGini = Infinity;
+                let bestSplit = null;
+                const nFeatures = X[0].length;
+                
+                let nFeaturesToConsider = nFeatures;
+                if (this.maxFeatures === 'sqrt') {
+                    nFeaturesToConsider = Math.floor(Math.sqrt(nFeatures));
+                } else if (this.maxFeatures === 'log2') {
+                    nFeaturesToConsider = Math.floor(Math.log2(nFeatures));
+                }
+                
+                const featureIndices = Array.from({length: nFeatures}, (_, i) => i);
+                for (let i = featureIndices.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [featureIndices[i], featureIndices[j]] = [featureIndices[j], featureIndices[i]];
+                }
+                const selectedFeatures = featureIndices.slice(0, nFeaturesToConsider);
+
+                for (const f of selectedFeatures) {
+                    const values = [...new Set(X.map(x => x[f]))].sort((a, b) => a - b);
+                    for (let i = 0; i < values.length - 1; i++) {
+                        const threshold = (values[i] + values[i + 1]) / 2;
+                        const gini = this.calculateGini(X, y, f, threshold);
+
+                        if (gini < bestGini) {
+                            bestGini = gini;
+                            bestSplit = { feature: f, threshold };
+                        }
+                    }
+                }
+
+                return bestSplit;
+            }
+
+            calculateGini(X, y, feature, threshold) {
+                let leftCount = 0, rightCount = 0;
+                const leftClassCounts = {};
+                const rightClassCounts = {};
+
+                for (let i = 0; i < X.length; i++) {
+                    if (X[i][feature] <= threshold) {
+                        leftCount++;
+                        leftClassCounts[y[i]] = (leftClassCounts[y[i]] || 0) + 1;
+                    } else {
+                        rightCount++;
+                        rightClassCounts[y[i]] = (rightClassCounts[y[i]] || 0) + 1;
+                    }
+                }
+
+                const leftGini = 1 - Object.values(leftClassCounts).reduce((sum, count) => 
+                    sum + Math.pow(count / leftCount, 2), 0);
+                    
+                const rightGini = 1 - Object.values(rightClassCounts).reduce((sum, count) => 
+                    sum + Math.pow(count / rightCount, 2), 0);
+
+                return (leftCount * leftGini + rightCount * rightGini) / X.length;
+            }
+
+            predict(x) {
+                return this.predictSingle(x, this.root);
+            }
+
+            predictSingle(x, node) {
+                if (node.isLeaf) return node.value;
+                return x[node.feature] <= node.threshold ? 
+                    this.predictSingle(x, node.left) : 
+                    this.predictSingle(x, node.right);
+            }
+
+            calculateClassWeights(y) {
+                const counts = {};
+                const weights = {};
+                const n_samples = y.length;
+                
+                for (const val of y) {
+                    counts[val] = (counts[val] || 0) + 1;
+                }
+                
+                const n_classes = Object.keys(counts).length;
+                for (const [cls, count] of Object.entries(counts)) {
+                    weights[cls] = (n_samples / (n_classes * count));
+                }
+                
+                return weights;
+            }
+
+            mostCommon(y) {
+                const counts = {};
+                const useWeights = document.getElementById('useClassWeights').checked;
+                let weights = {};
+                
+                if (useWeights) {
+                    weights = this.calculateClassWeights(y);
+                }
+                
+                for (const val of y) {
+                    counts[val] = (counts[val] || 0) + (useWeights ? weights[val] : 1);
+                }
+                
+                let maxCount = -Infinity;
+                let maxClass = null;
+                for (const [cls, count] of Object.entries(counts)) {
+                    if (count > maxCount) {
+                        maxCount = count;
+                        maxClass = cls;
+                    }
+                }
+                return maxClass;
+            }
+        }
+
+        class RandomForest {
+            constructor(nTrees = 10, maxDepth = 10, minSamplesSplit = 2, minSamplesLeaf = 1, maxFeatures = 'sqrt') {
+                this.nTrees = nTrees;
+                this.maxDepth = maxDepth;
+                this.minSamplesSplit = minSamplesSplit;
+                this.minSamplesLeaf = minSamplesLeaf;
+                this.maxFeatures = maxFeatures;
+                this.trees = [];
+            }
+
+            async fit(X, y) {
+                for (let i = 0; i < this.nTrees; i++) {
+                    const tree = new DecisionTree(
+                        this.maxDepth, 
+                        this.minSamplesSplit, 
+                        this.minSamplesLeaf,
+                        this.maxFeatures
+                    );
+                    const { bootstrapX, bootstrapY } = this.bootstrap(X, y);
+                    tree.fit(bootstrapX, bootstrapY);
+                    this.trees.push(tree);
+                    
+                    const progress = ((i + 1) / this.nTrees * 100).toFixed(1);
+                    document.getElementById('progress').textContent = 
+                        `Training progress: ${progress}%`;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+
+            bootstrap(X, y) {
+                const bootstrapX = [];
+                const bootstrapY = [];
+                for (let i = 0; i < X.length; i++) {
+                    const idx = Math.floor(Math.random() * X.length);
+                    bootstrapX.push(X[idx]);
+                    bootstrapY.push(y[idx]);
+                }
+                return { bootstrapX, bootstrapY };
+            }
+
+            predict(X) {
+                return X.map(x => {
+                    const predictions = this.trees.map(tree => tree.predict(x));
+                    return this.mostCommon(predictions);
+                });
+            }
+
+            mostCommon(arr) {
+                const counts = {};
+                const useWeights = document.getElementById('useClassWeights').checked;
+                let weights = {};
+                
+                if (useWeights) {
+                    weights = this.calculateClassWeights(arr);
+                }
+                
+                arr.forEach(val => {
+                    counts[val] = (counts[val] || 0) + (useWeights ? weights[val] : 1);
+                });
+                
+                return Object.entries(counts).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+            }
+
+            getFeatureImportance(X) {
+                const nFeatures = X[0].length;
+                const importance = new Array(nFeatures).fill(0);
+                
+                this.trees.forEach(tree => {
+                    this.calculateTreeImportance(tree.root, importance);
+                });
+                
+                const totalImportance = importance.reduce((sum, val) => sum + val, 0);
+                return importance.map(val => totalImportance > 0 ? val / totalImportance : 0);
+            }
+
+            calculateTreeImportance(node, importance) {
+                if (!node || node.isLeaf) return;
+
+                const impurityReduction = this.calculateImpurityReduction(node);
+                if (node.feature !== undefined) {
+                    importance[node.feature] += impurityReduction;
+                }
+
+                this.calculateTreeImportance(node.left, importance);
+                this.calculateTreeImportance(node.right, importance);
+            }
+
+            calculateImpurityReduction(node) {
+                if (!node || node.isLeaf || !node.left || !node.right) return 0;
+
+                const parentImpurity = this.calculateGiniImpurity(node.classCounts);
+                const leftImpurity = this.calculateGiniImpurity(node.left.classCounts);
+                const rightImpurity = this.calculateGiniImpurity(node.right.classCounts);
+
+                const leftWeight = node.left.samples / node.samples;
+                const rightWeight = node.right.samples / node.samples;
+
+                return parentImpurity - (leftWeight * leftImpurity + rightWeight * rightImpurity);
+            }
+
+            calculateGiniImpurity(classCounts) {
+                if (!classCounts) return 0;
+                
+                const total = Object.values(classCounts).reduce((sum, count) => sum + count, 0);
+                if (total === 0) return 0;
+
+                return 1 - Object.values(classCounts)
+                    .reduce((sum, count) => sum + Math.pow(count / total, 2), 0);
+            }
+
+            calculateClassWeights(y) {
+                const counts = {};
+                const weights = {};
+                const n_samples = y.length;
+                
+                for (const val of y) {
+                    counts[val] = (counts[val] || 0) + 1;
+                }
+                
+                const n_classes = Object.keys(counts).length;
+                for (const [cls, count] of Object.entries(counts)) {
+                    weights[cls] = (n_samples / (n_classes * count));
+                }
+                
+                return weights;
+            }
+        }
+    
+        // Dropdown event listeners
+        document.getElementById('dropdownToggle').addEventListener('click', function() {
+            const container = document.getElementById('checkboxContainer');
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+        });
+    
+        document.addEventListener('click', function(event) {
+            const container = document.getElementById('checkboxContainer');
+            const toggle = document.getElementById('dropdownToggle');
+            if (!container.contains(event.target) && !toggle.contains(event.target)) {
+                container.style.display = 'none';
+            }
+        });
+    
+        // Checkbox change handler
+        document.getElementById('checkboxContainer').addEventListener('change', function(e) {
+            if (e.target.type === 'checkbox') {
+                const value = parseInt(e.target.value);
+                if (e.target.checked) {
+                    options.push(value);
+                } else {
+                    options = options.filter(item => item !== value);
+                }
+                options.sort((a, b) => a - b);
+                console.log('Current options:', options);
+            }
+        });
+    
+        // Function to update checkbox container
+        function updateCheckboxContainer() {
+            if (!combinedCells || !combinedCells[0]) return;
+            
+            const container = document.getElementById('checkboxContainer');
+            container.innerHTML = ''; // Clear existing checkboxes
+            
+            // Initialize options array with all indices
+            options = Array.from({length: combinedCells[0].length}, (_, i) => i);
+            
+            // Create checkboxes for each header
+            combinedCells[0].forEach((header, index) => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '5px';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `option${index}`;
+                checkbox.value = index;
+                checkbox.checked = true;
+                
+                const label = document.createElement('label');
+                label.htmlFor = `option${index}`;
+                label.textContent = header;
+                label.style.marginLeft = '5px';
+                
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                container.appendChild(div);
+            });
+        }
+
+        // Process Data button handler
+        document.getElementById('processData').addEventListener('click', async () => {
+            if (!csvFiles.length) {
+                alert('No CSV files selected');
+                return;
+            }
+            
+            // Show progress bar and initialize
+            const progressBar = document.querySelector('.progress-fill');
+            document.querySelector('.loading').style.display = 'block';
+            
+            const processedData = [];
+            let processedCount = 0;
+            
+             // Reset combined arrays
+            combinedCells = [];
+            combinedVessels = [];
+            combinedGeneral = [];
+            let headersSet = false;
+            
+            // Process each CSV file
+            for (const file of csvFiles) {
+                // Update progress before processing
+                const progress = ((processedCount / csvFiles.length) * 100).toFixed(1);
+                progressBar.style.width = `${progress}%`;
+                
+                // Force UI update
+                await new Promise(resolve => setTimeout(resolve, 0));
+                try {
+                    const results = await new Promise((resolve, reject) => {
+                        Papa.parse(file, {
+                            header: true,
+                            dynamicTyping: true,
+                            skipEmptyLines: true,
+                            complete: resolve,
+                            error: reject
+                        });
+                    });
+                    
+                    // Get headers from first file and add filename column
+                    const headers = results.meta.fields;
+                    headers.push('file');
+                                        
+                    // Create modified headers with prefixes
+                    const nucleiHeaders = headers.map(h => `Nucleus_${h}`);
+                    const cytoplasmHeaders = headers.map(h => `Cytoplasm_${h}`);
+                    
+                    // Initialize cell array with combined headers (only once)
+                    if (!headersSet) {
+                        combinedCells.push([...nucleiHeaders, ...cytoplasmHeaders, 'file']);
+                        combinedVessels.push([...headers]);
+                        combinedGeneral.push([...headers]);
+                        headersSet = true;
+                    }
+                    
+                    // Create lookup tables for nuclei and cytoplasm
+                    const nucleiLookup = new Map();
+                    const cytoplasmLookup = new Map();
+                    
+                    results.data.forEach(row => {
+                        const values = Object.values(row);
+                        const filename = file.name;
+                        const roi = String(values[0] || '');
+                        
+                        if (roi.startsWith('Nucleus_')) {
+                            nucleiLookup.set(roi, [...values, file.name]);
+                        } else if (roi.startsWith('Cytoplasm_')) {
+                            cytoplasmLookup.set(roi, [...values, file.name]);
+                        }
+                    });
+                    
+                    // Combine matching nuclei and cytoplasm by index
+                    nucleiLookup.forEach((nucleusValues, nucleusKey) => {
+                        const cytoplasmKey = nucleusKey.replace('Nucleus_', 'Cytoplasm_');
+                        if (cytoplasmLookup.has(cytoplasmKey)) {
+                            const cytoplasmValues = cytoplasmLookup.get(cytoplasmKey);
+                            // Create combined row
+                            const combinedRow = [...nucleusValues, ...cytoplasmValues, file.name];
+                            
+                            // Get indices of columns to remove
+                            const header = combinedCells[0];
+                            const cytoplasmFileIndex = header.indexOf('Cytoplasm_file');
+                            const nucleusFileIndex = header.indexOf('Nucleus_file');
+                            
+                    // Get index of Cytoplasm_ROI
+                    const cytoplasmROIIndex = header.indexOf('Cytoplasm_ROI');
+                    
+                    // Filter out unwanted columns including the Cytoplasm_ROI index
+                    const filteredRow = combinedRow
+                        .filter((_, index) => 
+                            index !== cytoplasmFileIndex && 
+                            index !== nucleusFileIndex &&
+                            index !== cytoplasmROIIndex
+                        );
+                            
+                    combinedCells.push(filteredRow);
+                        }
+                    });
+                    
+                    // Update headers to remove unwanted columns and rename Nucleus_ROI
+                    const header = combinedCells[0];
+                    const cytoplasmROIIndex = header.indexOf('Cytoplasm_ROI');
+                    const cytoplasmFileIndex = header.indexOf('Cytoplasm_file');
+                    const nucleusFileIndex = header.indexOf('Nucleus_file');
+                    
+                    // Filter headers and rename Nucleus_ROI to Cell_ROI
+                    combinedCells[0] = header
+                            .filter((col, index) => 
+                                index !== cytoplasmFileIndex && 
+                                index !== nucleusFileIndex &&
+                                index !== cytoplasmROIIndex
+                            )
+                        
+                    // Process remaining data
+                    results.data.forEach(row => {
+                        const values = Object.values(row);
+                        const filename = file.name;
+                        const roi = String(values[0] || '');
+                        
+                        if (roi.startsWith('Vessel_') || roi.startsWith('Border_')) {
+                            combinedVessels.push([...values, file.name]);
+                        } else if (!roi.startsWith('Nucleus_') && !roi.startsWith('Cytoplasm_')) {
+                            combinedGeneral.push([...values, file.name]);
+                        }
+                    });
+                    
+                    processedCount++;
+                    
+                } catch (error) {
+                    console.error('Error processing CSV:', error);
+                    alert(`Error processing file: ${file.name}`);
+                }
+            }
+            
+            console.log('Processed Data:', processedData);
+            console.log('Combined Cells:', combinedCells);
+            console.log('Combined Vessels:', combinedVessels);
+            console.log('Combined General Info:', combinedGeneral);
+            progressBar.style.width = '100%';
+            progressBar.style.backgroundColor = '#27ae60'; // Green for success
+            
+            // Remove all existing data buttons
+            document.querySelectorAll('.data-button').forEach(button => button.remove());
+            
+            // Create download buttons container
+            const downloadContainer = document.createElement('div');
+            downloadContainer.style.marginTop = '20px';
+            downloadContainer.style.display = 'flex';
+            downloadContainer.style.flexDirection = 'column';
+            downloadContainer.style.gap = '10px';
+            
+            // Create download buttons for combined data
+            const combinedData = [combinedCells, combinedVessels, combinedGeneral];
+            ['Cells', 'Vessels', 'General Info'].forEach((type, typeIndex) => {
+                const button = document.createElement('button');
+                button.textContent = `Download Combined ${type}`;
+                button.className = 'data-button';
+                button.style.padding = '8px 15px';
+                button.style.background = '#3498db';
+                button.style.color = 'white';
+                button.style.borderRadius = '4px';
+                button.style.cursor = 'pointer';
+                button.style.fontFamily = 'Arial, Helvetica, sans-serif';
+                
+                button.addEventListener('click', () => {
+                    const csv = Papa.unparse(combinedData[typeIndex]);
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `combined_${type.toLowerCase().replace(' ', '_')}.csv`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                });
+                
+                downloadContainer.appendChild(button);
+            });
+            
+            // Add download buttons to page
+            const page2Container = document.querySelector('#page2 .container');
+            page2Container.appendChild(downloadContainer);
+            
+            // Add training data matching button
+            const matchButton = document.createElement('button');
+            matchButton.textContent = 'Download Matched Training Data';
+            matchButton.className = 'data-button';
+            matchButton.style.padding = '8px 15px';
+            matchButton.style.background = '#9b59b6';
+            matchButton.style.color = 'white';
+            matchButton.style.borderRadius = '4px';
+            matchButton.style.cursor = 'pointer';
+            matchButton.style.fontFamily = 'Arial, Helvetica, sans-serif';
+            matchButton.style.marginTop = '10px';
+            
+            // Function to match training data with combined cells
+            function matchTrainingData() {
+                if (!trainingData || trainingData.length < 2) {
+                    alert('No training data available');
+                    return false;
+                }
+                
+                // Create map of combined cells for quick lookup
+                const combinedMap = new Map();
+                combinedCells.slice(1).forEach(row => {
+                    const nucleusFile = row[row.length - 1]; // Last column is filename
+                    const roi = row[0]; // First column is ROI
+                    combinedMap.set(`${nucleusFile}|${roi}`, row);
+                });
+                
+                // Create matched data with combined cells data and prepare for random forest
+                matchedData = [combinedCells[0]]; // Use combined cells headers
+                const featureIndices = options.length > 0 ? options : Array.from({length: combinedCells[0].length - 1}, (_, i) => i);
+                
+                // Map training data to combined cells data
+                trainingData.slice(1).forEach(trainingRow => {
+                    const filename = trainingRow[trainingRow.length - 3]; // Filename is 3rd from end
+                    const roi = trainingRow[0]; // First column is ROI
+                    const key = `${filename}|${roi}`;
+                    
+                    if (combinedMap.has(key)) {
+                        const combinedRow = combinedMap.get(key);
+                        // Extract only selected features and class
+                        const features = featureIndices.map(i => parseFloat(combinedRow[i]));
+                        const classLabel = trainingRow[trainingRow.length - 2]; // Class label from training data
+                        
+                        // Add processed row with selected features and class
+                        matchedData.push([...features, classLabel]);
+                    }
+                });
+                console.log("Matched Data:", matchedData);
+                return true;
+            }
+
+            matchButton.addEventListener('click', () => {
+                if (!matchTrainingData()) return;
+                // Convert to CSV and download
+                const csv = Papa.unparse(matchedData);
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'matched_training_data.csv';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            });
+            
+            page2Container.appendChild(matchButton);
+            
+            // Match training data after processing
+            matchTrainingData();
+            
+            setTimeout(() => {
+                document.querySelector('.loading').style.display = 'none';
+                progressBar.style.backgroundColor = '#3498db'; // Reset to blue
+                progressBar.style.width = '0%'; // Reset progress
+                
+                // Update checkbox container with new data
+                options = []; // Reset options array
+                updateCheckboxContainer();
+
+            // Add Train Model button and feature selection info after data processing
+            const controlsContainer = document.createElement('div');
+            controlsContainer.style.marginTop = '20px';
+            
+            // const featureInfo = document.createElement('div');
+            // featureInfo.innerHTML = `<p>Selected Features: ${options.length > 0 ? options.join(', ') : 'All features'}</p>`;
+            // controlsContainer.appendChild(featureInfo);
+            
+            const trainButton = document.createElement('button');
+            trainButton.textContent = 'Train Random Forest Model';
+            trainButton.style.padding = '8px 15px';
+            trainButton.style.background = '#2ecc71';
+            trainButton.style.color = 'white';
+            trainButton.style.border = 'none';
+            trainButton.style.borderRadius = '4px';
+            trainButton.style.cursor = 'pointer';
+            trainButton.style.marginTop = '10px';
+            trainButton.onclick = trainRandomForest;
+            controlsContainer.appendChild(trainButton);
+            
+            document.getElementById('results').appendChild(controlsContainer);
+            }, 2000);
+        });
+
+            async function trainRandomForest() {
+                try {
+                    if (!trainingData || trainingData.length < 2) {
+                        alert('No training data available');
+                        return;
+                    }
+
+                    // Prepare training data using options array for feature selection
+                    const X = trainingData.slice(1).map(row => 
+                        options.map(i => parseFloat(row[i]))
+                    );
+                    const y = trainingData.slice(1).map(row => row[row.length - 2]); // Class label is 2nd from end
+
+                // Get model parameters
+                const params = {
+                    numTrees: parseInt(document.getElementById('numTrees').value),
+                    maxDepth: parseInt(document.getElementById('maxDepth').value),
+                    minSamplesSplit: parseInt(document.getElementById('minSamplesSplit').value),
+                    minSamplesLeaf: parseInt(document.getElementById('minSamplesLeaf').value),
+                    maxFeatures: document.getElementById('maxFeatures').value
+                };
+
+                // Create and train model
+                const model = new RandomForest(
+                    params.numTrees,
+                    params.maxDepth,
+                    params.minSamplesSplit,
+                    params.minSamplesLeaf,
+                    params.maxFeatures
+                );
+
+                document.getElementById('progress').textContent = 'Training model...';
+                await model.fit(X, y);
+                trainedModel = model;
+
+                let resultHTML = '<h3>Training Results</h3>';
+
+                // Cross validation if enabled
+                if (document.getElementById('doCrossValidation').checked) {
+                    const k = parseInt(document.getElementById('kFold').value);
+                    const foldSize = Math.floor(X.length / k);
+                    let totalAccuracy = 0;
+
+                    for (let i = 0; i < k; i++) {
+                        const start = i * foldSize;
+                        const end = (i + 1) * foldSize;
+                        
+                        const X_val = X.slice(start, end);
+                        const y_val = y.slice(start, end);
+                        const X_train = [...X.slice(0, start), ...X.slice(end)];
+                        const y_train = [...y.slice(0, start), ...y.slice(end)];
+
+                        const foldModel = new RandomForest(
+                            params.numTrees,
+                            params.maxDepth,
+                            params.minSamplesSplit,
+                            params.minSamplesLeaf,
+                            params.maxFeatures
+                        );
+                        
+                        await foldModel.fit(X_train, y_train);
+                        const predictions = foldModel.predict(X_val);
+                        const accuracy = predictions.reduce((acc, pred, idx) => 
+                            acc + (pred === y_val[idx] ? 1 : 0), 0) / y_val.length;
+                        
+                        totalAccuracy += accuracy;
+                    }
+
+                    const avgAccuracy = (totalAccuracy / k * 100).toFixed(2);
+                    resultHTML += `<p>Cross-validation accuracy: ${avgAccuracy}%</p>`;
+                }
+
+                // Feature importance if enabled
+                if (document.getElementById('doImportance').checked) {
+                    const importance = model.getFeatureImportance(X);
+                    resultHTML += '<h4>Feature Importance</h4><table><tr><th>Feature</th><th>Importance</th></tr>';
+                    importance.forEach((score, idx) => {
+                        const featureIndex = options[idx];
+                        const featureName = combinedCells[0][featureIndex];
+                        resultHTML += `<tr><td>${featureName}</td><td>${score.toFixed(4)}</td></tr>`;
+                    });
+                    resultHTML += '</table>';
+                }
+
+                // Add download model button
+                resultHTML += `
+                    <button onclick="downloadTrainedModel()" style="margin-top: 10px; padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 10px; cursor: pointer;">
+                        Download Model
+                    </button>`;
+
+                document.getElementById('results').innerHTML = resultHTML;
+                document.getElementById('progress').textContent = 'Training complete!';
+
+                // Add classify button after successful training
+                const classifyButton = document.createElement('button');
+                classifyButton.textContent = 'Classify All Cells';
+                classifyButton.style.padding = '8px 15px';
+                classifyButton.style.background = '#e67e22';
+                classifyButton.style.color = 'white';
+                classifyButton.style.border = 'none';
+                classifyButton.style.borderRadius = '4px';
+                classifyButton.style.cursor = 'pointer';
+                classifyButton.style.marginTop = '20px';
+                classifyButton.onclick = classifyCombinedCells;
+                document.getElementById('results').appendChild(classifyButton);
+
+            } catch (error) {
+                console.error('Error during training:', error);
+                document.getElementById('progress').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function classifyCombinedCells() {
+            try {
+                if (!trainedModel) {
+                    alert('Please train the model first');
+                    return;
+                }
+
+                // Use the same feature indices as training
+                const selectedFeatures = options.length > 0 ? options : 
+                    Array.from({length: combinedCells[0].length - 1}, (_, i) => i);
+
+                // Prepare data for classification
+                const X = combinedCells.slice(1).map(row => 
+                    selectedFeatures.map(i => parseFloat(row[i]))
+                );
+
+                // Get predictions
+                const predictions = trainedModel.predict(X);
+
+                // Create results table
+                let resultHTML = '<h3>Classification Results</h3>';
+                resultHTML += '<table style="margin-top: 10px;"><tr><th>ROI</th><th>Predicted Class</th></tr>';
+                
+                combinedCells.slice(1).forEach((row, index) => {
+                    resultHTML += `<tr>
+                        <td>${row[0]}</td>
+                        <td>${predictions[index]}</td>
+                    </tr>`;
+                });
+                resultHTML += '</table>';
+
+                // Create download button for results
+                const resultsContainer = document.createElement('div');
+                resultsContainer.innerHTML = resultHTML;
+                
+                const downloadButton = document.createElement('button');
+                downloadButton.textContent = 'Download Classification Results';
+                downloadButton.style.padding = '8px 15px';
+                downloadButton.style.background = '#3498db';
+                downloadButton.style.color = 'white';
+                downloadButton.style.border = 'none';
+                downloadButton.style.borderRadius = '4px';
+                downloadButton.style.cursor = 'pointer';
+                downloadButton.style.marginTop = '20px';
+                downloadButton.onclick = () => {
+                    // Prepare CSV data
+                    const csvData = [
+                        ['ROI', 'Predicted Class'],
+                        ...combinedCells.slice(1).map((row, index) => [
+                            row[0],
+                            predictions[index]
+                        ])
+                    ];
+                    
+                    // Convert to CSV and download
+                    const csv = Papa.unparse(csvData);
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'classification_results.csv';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                };
+                
+                resultsContainer.appendChild(downloadButton);
+                document.getElementById('results').appendChild(resultsContainer);
+
+            } catch (error) {
+                console.error('Error during classification:', error);
+                document.getElementById('progress').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        function downloadTrainedModel() {
+            if (!trainedModel) {
+                alert('No trained model available');
+                return;
+            }
+
+            const modelData = {
+                params: {
+                    nTrees: trainedModel.nTrees,
+                    maxDepth: trainedModel.maxDepth,
+                    minSamplesSplit: trainedModel.minSamplesSplit,
+                    minSamplesLeaf: trainedModel.minSamplesLeaf,
+                    maxFeatures: trainedModel.maxFeatures
+                },
+                trees: trainedModel.trees.map(tree => ({
+                    maxDepth: tree.maxDepth,
+                    minSamplesSplit: tree.minSamplesSplit,
+                    minSamplesLeaf: tree.minSamplesLeaf,
+                    maxFeatures: tree.maxFeatures,
+                    root: tree.root
+                }))
+            };
+
+            const blob = new Blob([JSON.stringify(modelData)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'random_forest_model.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
