@@ -20,8 +20,9 @@ For example, assigning a **Nuclei Threshold** of 255 will only select as nuclear
 To understand what value works best for you, do a test run where you check the **Save Probability Maps** checkbox *(see later)*. Then open those images and do a threshold in ImageJ (*Image → Adjust → Threshold...* or *Ctrl+Shift+T*). It will allow you to visualize the results of these variables.
 
 <div style="display: flex; gap: 10px;">
-  <img src="https://www.shutterstock.com/image-photo/calm-weather-on-sea-ocean-600nw-2212935531.jpg" alt="Placeholder Image" width="150" height="150">
-  <img src="https://www.shutterstock.com/image-photo/calm-weather-on-sea-ocean-600nw-2212935531.jpg" alt="Placeholder Image" width="150" height="150">
+  <img src="https://github.com/sebastianmicu24/SCHEMA/blob/main/Images/Threshold%20Example%201.png" alt="Placeholder Image" width="200" height="200">
+  <img src="https://github.com/sebastianmicu24/SCHEMA/blob/main/Images/Threshold%20Example%202.png" alt="Placeholder Image" width="200" height="200">
+  <img src="https://github.com/sebastianmicu24/SCHEMA/blob/main/Images/Threshold%20Example%203.png" alt="Placeholder Image" width="200" height="200">
 </div>
 
 ---
