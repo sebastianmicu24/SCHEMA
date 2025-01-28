@@ -1,3 +1,4 @@
+<!-- Todas las cellulas uploadadas se coloran de negro -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -1580,36 +1581,43 @@ const margin = 0.2 * Math.max(viewWidth, viewHeight);
                 // Feature importance if enabled
                 if (document.getElementById('doImportance').checked) {
                     const importance = model.getFeatureImportance(X);
-                    resultHTML += '<h4>Feature Importance</h4><table><tr><th>Feature</th><th>Importance</th></tr>';
+                    resultHTML += '<h4>Feature Importance</h4><div style="max-height: 200px; overflow-y: auto;"><table><tr><th>Feature</th><th>Importance</th></tr>';
                     importance.forEach((score, idx) => {
                         const featureIndex = options[idx];
                         const featureName = combinedCells[0][featureIndex];
                         resultHTML += `<tr><td>${featureName}</td><td>${score.toFixed(4)}</td></tr>`;
                     });
-                    resultHTML += '</table>';
+                    resultHTML += '</table></div>';
                 }
 
-                // Add download model button
-                resultHTML += `
-                    <button onclick="downloadTrainedModel()" style="margin-top: 10px; padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 10px; cursor: pointer;">
-                        Download Model
-                    </button>`;
+                // Add download button
+                const downloadButton = document.createElement('button');
+                downloadButton.textContent = 'Download Classified Data';
+                downloadButton.style.cssText = 'padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;';
+                downloadButton.onclick = () => {
+                    const predictions = trainedModel.predict(combinedCells.slice(1).map(row => options.map(i => parseFloat(row[i]))));
+                    const csvData = [
+                        [...combinedCells[0], 'Predicted_Class'],
+                        ...combinedCells.slice(1).map((row, index) => [...row, predictions[index]])
+                    ];
+                    const csv = Papa.unparse(csvData);
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'classified_results.csv';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                };
 
-                document.getElementById('results').innerHTML = resultHTML;
+                // Update results display
+                const resultsDiv = document.getElementById('results');
+                resultsDiv.innerHTML = resultHTML;
+                resultsDiv.appendChild(downloadButton);
+
                 document.getElementById('progress').textContent = 'Training complete!';
-
-                // Add classify button after successful training
-                const classifyButton = document.createElement('button');
-                classifyButton.textContent = 'Classify All Cells';
-                classifyButton.style.padding = '8px 15px';
-                classifyButton.style.background = '#e67e22';
-                classifyButton.style.color = 'white';
-                classifyButton.style.border = 'none';
-                classifyButton.style.borderRadius = '4px';
-                classifyButton.style.cursor = 'pointer';
-                classifyButton.style.marginTop = '20px';
-                classifyButton.onclick = classifyCombinedCells;
-                document.getElementById('results').appendChild(classifyButton);
 
             } catch (error) {
                 console.error('Error during training:', error);
@@ -1729,3 +1737,4 @@ const margin = 0.2 * Math.max(viewWidth, viewHeight);
         }
     </script>
 </body>
+</html>
